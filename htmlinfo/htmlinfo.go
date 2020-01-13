@@ -3,6 +3,7 @@ package htmlinfo
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -50,9 +51,10 @@ type HTMLInfo struct {
 	TouchIcons    []*TouchIcon `json:"touch_icons"`
 	ImageSrcURL   string       `json:"image_src_url"`
 	// Readability package is being used inside
-	MainContent string               `json:"main_content"`
-	OGInfo      *opengraph.OpenGraph `json:"opengraph"`
-	OembedInfo  *oembed.Info         `json:"oembed"`
+	MainContent string                 `json:"main_content"`
+	OGInfo      *opengraph.OpenGraph   `json:"opengraph"`
+	OembedInfo  *oembed.Info           `json:"oembed"`
+	LinkedData  map[string]interface{} `json:"linked_data"`
 }
 
 var (
@@ -111,20 +113,20 @@ func (info *HTMLInfo) appendTouchIcons(url string, rel string, sizes []string) {
 func (info *HTMLInfo) parseLinkIcon(attrs map[string]string) {
 	rels := strings.Split(attrs["rel"], " ")
 	url := info.toAbsoluteURL(attrs["href"])
-	sizesString, present := attrs["sizes"]
-	if !present {
-		sizesString = "0x0"
-	}
-	sizes := strings.Split(sizesString, " ")
+	//sizesString, present := attrs["sizes"]
+	//if !present {
+	//	sizesString = "0x0"
+	//}
+	//sizes := strings.Split(sizesString, " ")
 
 	for _, rel := range rels {
 		if rel == "image_src" {
 			info.ImageSrcURL = url
 		} else if rel == "icon" {
 			info.FaviconURL = url
-			info.appendTouchIcons(url, rel, sizes)
-		} else if rel == "apple-touch-icon" || rel == "apple-touch-icon-precomposed" {
-			info.appendTouchIcons(url, rel, sizes)
+			//	info.appendTouchIcons(url, rel, sizes)
+			//} else if rel == "apple-touch-icon" || rel == "apple-touch-icon-precomposed" {
+			//	info.appendTouchIcons(url, rel, sizes)
 		}
 	}
 }
@@ -162,6 +164,19 @@ func (info *HTMLInfo) parseHead(n *html.Node) {
 			}
 
 			info.OGInfo.ProcessMeta(m)
+		} else if c.Type == html.ElementNode && c.Data == "script" {
+			for _, a := range c.Attr {
+				if a.Key != "type" || a.Val != "application/ld+json" {
+					continue
+				}
+				if c.FirstChild != nil {
+					err := json.Unmarshal([]byte(c.FirstChild.Data), &info.LinkedData)
+					if err != nil {
+						fmt.Printf("error unmarshaling ld: %s\n", err.Error())
+						info.LinkedData = nil
+					}
+				}
+			}
 		}
 	}
 }
